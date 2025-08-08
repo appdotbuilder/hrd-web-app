@@ -1,25 +1,36 @@
 services:
   app:
-    build: .
-    container_name: ${BACKEND_CONTAINER_NAME:-app}
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "80:8000"
+      - "80:80"
+      - "2022:2022"
     environment:
-      - NICEGUI_STORAGE_SECRET=${NICEGUI_STORAGE_SECRET:-STORAGE_SECRET}
-      - NICEGUI_PORT=8000
-      - APP_DATABASE_URL=${APP_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/postgres}
-      - DATABRICKS_HOST=${DATABRICKS_HOST}
-      - DATABRICKS_TOKEN=${DATABRICKS_TOKEN}
-    command: ${APP_COMMAND:-}
+      - APP_DATABASE_URL=${APP_DATABASE_URL:-postgres://postgres:postgres@postgres:5432/postgres}
+    container_name: ${BACKEND_CONTAINER_NAME:-app}
+    depends_on:
+      db-push:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2022/healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  db-push:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${DB_PUSH_CONTAINER_NAME:-app-db-push}
+    command: ["bun", "run", "drizzle-kit", "push", "--force"]
+    working_dir: /app/server
+    environment:
+      - APP_DATABASE_URL=${APP_DATABASE_URL:-postgres://postgres:postgres@postgres:5432/postgres}
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
 
   postgres:
     container_name: ${POSTGRES_CONTAINER_NAME:-postgres}
